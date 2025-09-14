@@ -1,0 +1,39 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15
+    container_name: cocos_db
+    environment:
+      POSTGRES_USER: tester
+      POSTGRES_PASSWORD: tester
+      POSTGRES_DB: cocos_test
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./src/db/test-database.sql:/docker-entrypoint-initdb.d/test-database.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tester -d cocos_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: cocos_api
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
