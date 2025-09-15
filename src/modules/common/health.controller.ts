@@ -2,7 +2,7 @@ import { Controller, Get, Inject } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @ApiTags('Health')
-@Controller("api/health")
+@Controller("health")
 export class HealthController {
     constructor (@Inject('LOGGER') private readonly logger) {}
 

@@ -5,7 +5,7 @@ import { GlobalHttpExceptionFilter } from './common/http-exception.filter';
 import { GlobalResponseInterceptor } from './common/response.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = (await NestFactory.create(AppModule)).setGlobalPrefix('api');
 
   const config = new DocumentBuilder()
     .setTitle('Cocos Trading Api')
