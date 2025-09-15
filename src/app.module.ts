@@ -5,12 +5,14 @@ import { LoggerProviderModule } from './common/logger.provider.module';
 import { GlobalHttpExceptionFilter } from './common/http-exception.filter';
 import { GlobalResponseInterceptor } from './common/response.interceptor';
 import { InstrumentModule } from './modules/instruments/instrument.module';
+import { AccountModule } from './modules/accounts/account.module';
 
 @Module({
   imports: [
     LoggerProviderModule,
     DatabaseModule,
     InstrumentModule,
+    AccountModule,
   ],
   controllers: [HealthController],
   providers: [GlobalHttpExceptionFilter, GlobalResponseInterceptor],
