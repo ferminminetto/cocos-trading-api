@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 
 /** Internal row shape returned by the repository. */
 export interface PortfolioRow {
@@ -23,7 +23,7 @@ export class AccountRepository {
   constructor(private readonly dataSource: DataSource) { }
 
   /**
-   * Single round-trip portfolio query using CTEs.
+   * Single round-trip portfolio query using CTEs. Used raw SQL for efficiency and clarity over ORM.
    * - Positions: net shares from FILLED orders only (no fractions).
    * - Prices: latest close & previousClose per instrument.
    * - Cash: CASH_IN/OUT and FILLED BUY/SELL flows.
@@ -109,5 +109,31 @@ export class AccountRepository {
       total_value: row.total_value,
       positions: row.positions ?? [],
     };
+  }
+
+  async getCashAvailable(userId: number, mgr?: EntityManager): Promise<string> {
+    const [row] = await (mgr ?? this.dataSource).query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN side='CASH_IN'  AND status='FILLED' THEN size ELSE 0 END),0)::numeric
+      - COALESCE(SUM(CASE WHEN side='CASH_OUT' AND status='FILLED' THEN size ELSE 0 END),0)::numeric
+      - COALESCE(SUM(CASE WHEN side='BUY'     AND status='FILLED' THEN size*price ELSE 0 END),0)::numeric
+      + COALESCE(SUM(CASE WHEN side='SELL'    AND status='FILLED' THEN size*price ELSE 0 END),0)::numeric
+        AS cash_available
+      FROM orders
+      WHERE userid = $1
+    `, [userId]);
+    return row?.cash_available ?? '0';
+  }
+
+  async getNetShares(userId: number, instrumentId: number, mgr?: EntityManager): Promise<string> {
+    const [row] = await (mgr ?? this.dataSource).query(`
+      SELECT (
+        COALESCE(SUM(CASE WHEN side='BUY'  AND status='FILLED' AND instrumentid=$2 THEN size ELSE 0 END),0)
+      - COALESCE(SUM(CASE WHEN side='SELL' AND status='FILLED' AND instrumentid=$2 THEN size ELSE 0 END),0)
+      )::numeric AS shares
+      FROM orders
+      WHERE userid = $1
+    `, [userId, instrumentId]);
+    return row?.shares ?? '0';
   }
 }
