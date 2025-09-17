@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { User } from '../../accounts/models/user.entity';
+import { Entity, PrimaryGeneratedColumn, Column, JoinColumn, ManyToOne } from 'typeorm';
 
 @Entity({ name: 'orders' })
 export class Order {
@@ -29,4 +30,11 @@ export class Order {
 
   @Column({ name: 'datetime', type: 'timestamp', nullable: true })
   datetime!: Date | null;
+
+  @Column({ name: 'idempotence_key', type: 'varchar', nullable: true })
+  idempotenceKey!: string | null;
+
+  @ManyToOne(() => User, (user) => user.orders, { nullable: false })
+  @JoinColumn({ name: 'userid' })
+  user!: User;
 }

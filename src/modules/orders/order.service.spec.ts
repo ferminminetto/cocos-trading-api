@@ -7,6 +7,7 @@ import { MarketDataRepository } from './market-data.repository';
 import { CreateOrderDto, } from './dto/create-order.dto';
 import { ORDER_STATUS, ORDER_TYPES, ORDER_SIDES } from './constants/order.constants';
 import { BadRequestException } from '@nestjs/common';
+import { TEST_INSTRUMENT_ID_CURRENCY, TEST_INSTRUMENT_ID_STOCK } from '../../../test/constants';
 
 /**
  * Integration tests for OrderService.create using the real database.
@@ -63,7 +64,7 @@ describe('OrderService (integration)', () => {
 
   it('BUY MARKET with exact cash -> FILLED, cash=0, net shares=10', async () => {
     const userId = testUserId;
-    const instrumentId = 20;   // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK;   // Existing instrument except currency (MONEDA)
 
     // Provide a deterministic MARKET price = 100.00
     await marketRepo.save({
@@ -78,7 +79,7 @@ describe('OrderService (integration)', () => {
 
     // Ensure user has exactly $1000 cash available via a FILLED CASH_IN
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 1000,
       price: '1.00',
@@ -122,7 +123,7 @@ describe('OrderService (integration)', () => {
 
   it('BUY MARKET without enough cash -> REJECTED, cash and shares remain the same', async () => {
     const userId = testUserId;
-    const instrumentId = 20; // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK; // Existing instrument except currency (MONEDA)
 
     // Set up market price
     await marketRepo.save({
@@ -137,7 +138,7 @@ describe('OrderService (integration)', () => {
 
     // PRECONDITION: user with $500 cash
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 500,
       price: '1.00',
@@ -172,7 +173,7 @@ describe('OrderService (integration)', () => {
 
   it('BUY MARKET using moneyAmount -> FILLED, remaining cash not used, shares=3', async () => {
     const userId = testUserId;
-    const instrumentId = 20; // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK; // Existing instrument except currency (MONEDA)
 
     // Set up market price
     await marketRepo.save({
@@ -187,7 +188,7 @@ describe('OrderService (integration)', () => {
 
     // PRECONDITION: user with $1000 cash
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 1000,
       price: '1.00',
@@ -222,7 +223,7 @@ describe('OrderService (integration)', () => {
 
   it('BUY LIMIT -> NEW, cash and positions should remain the same', async () => {
     const userId = testUserId;
-    const instrumentId = 20; // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK; // Existing instrument except currency (MONEDA)
 
     // Provide a deterministic MARKET price = 100.00
     await marketRepo.save({
@@ -237,7 +238,7 @@ describe('OrderService (integration)', () => {
 
     // Ensure user has exactly $1000 cash available via a FILLED CASH_IN
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 1000,
       price: '1.00',
@@ -269,7 +270,7 @@ describe('OrderService (integration)', () => {
 
   it('BUY LIMIT without price -> BadRequest', async () => {
     const userId = testUserId;
-    const instrumentId = 20; // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK; // Existing instrument except currency (MONEDA)
 
     // Provide a deterministic MARKET price = 100.00
 
@@ -288,7 +289,7 @@ describe('OrderService (integration)', () => {
 
   it('SELL MARKET with enough shares -> FILLED, cash=25 (incremented), net shares=1(deducted)', async () => {
     const userId = testUserId;
-    const instrumentId = 20;   // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK;   // Existing instrument except currency (MONEDA)
 
     // Provide a deterministic MARKET price = 5
     await marketRepo.save({
@@ -303,7 +304,7 @@ describe('OrderService (integration)', () => {
 
     // Ensure user has exactly $60 cash available via a FILLED CASH_IN
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 60,
       price: '1.00',
@@ -360,7 +361,7 @@ describe('OrderService (integration)', () => {
 
   it('SELL MARKET without enough shares -> REJECTED, net shares=5(stay the same)', async () => {
     const userId = testUserId;
-    const instrumentId = 20;   // Existing instrument except currency (MONEDA)
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK;   // Existing instrument except currency (MONEDA)
 
     // Provide a deterministic MARKET price = 5
     await marketRepo.save({
@@ -375,7 +376,7 @@ describe('OrderService (integration)', () => {
 
     // Ensure user has exactly $50 cash available via a FILLED CASH_IN
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 50,
       price: '1.00',
@@ -442,11 +443,11 @@ describe('OrderService (integration)', () => {
 
   it('CASH OUT without enough money -> REJECTED, money stays the same', async () => {
     const userId = testUserId;
-    const instrumentId = 66;   // Existing currency
+    const instrumentId = TEST_INSTRUMENT_ID_CURRENCY;   // Existing currency
 
     // Ensure user has exactly $50 cash available via a FILLED CASH_IN
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 50,
       price: '1.00',
@@ -458,7 +459,7 @@ describe('OrderService (integration)', () => {
 
     const dto: CreateOrderDto = {
       userId,
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       side: ORDER_SIDES.CASH_OUT,
       type: ORDER_TYPES.MARKET,
       size: 51,
@@ -494,7 +495,7 @@ describe('OrderService (integration)', () => {
 
   });
 
-  it('Getportfolio tras secuencia típica: CASH_IN 1000 → BUY MARKET 5@100 → SELL MARKET 2@120', async () => {
+  it('Getportfolio after a sequence of orders: CASH_IN 1000 → BUY MARKET 5@100 → SELL MARKET 2@120', async () => {
     const userId = testUserId;
     const instrumentId = 20; // existing instrument non-currency
 
@@ -511,7 +512,7 @@ describe('OrderService (integration)', () => {
 
     // CASH_IN 1000
     await ordersRepo.insert({
-      instrumentId: 66,
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
       userId,
       size: 1000,
       price: '1.00',

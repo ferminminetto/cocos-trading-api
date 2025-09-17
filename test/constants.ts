@@ -1,0 +1,2 @@
+export const TEST_INSTRUMENT_ID_CURRENCY = 66; 
+export const TEST_INSTRUMENT_ID_STOCK = 20; 

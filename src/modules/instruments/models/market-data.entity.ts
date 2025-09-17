@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, JoinColumn, ManyToOne } from 'typeorm';
+import { Instrument } from './instrument.entity';
 
 @Entity({ name: 'marketdata' })
 export class MarketData {
@@ -7,6 +8,10 @@ export class MarketData {
 
   @Column({ name: 'instrumentid', type: 'int' })
   instrumentId!: number;
+
+  @ManyToOne(() => Instrument, { nullable: false })
+  @JoinColumn({ name: 'instrumentid' })
+  instrument!: Instrument;
 
   @Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
   high!: string | null;
