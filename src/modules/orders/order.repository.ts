@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Order } from './models/order.entity';
 
@@ -10,6 +10,12 @@ import { Order } from './models/order.entity';
 export class OrderRepository extends Repository<Order> {
   constructor(private readonly ds: DataSource) {
     super(Order, ds.createEntityManager());
+  }
+
+  async ensureNotDuplicated(idemKey: string, mgr: EntityManager): Promise<void> {
+    const repo = mgr.getRepository(Order);
+    const order = await repo.findOne({ where: { idempotenceKey: idemKey } });
+    if (order) throw new BadRequestException('Duplicate order');
   }
 
   async lockUser(mgr: EntityManager, userId: number): Promise<void> {
