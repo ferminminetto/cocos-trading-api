@@ -11,10 +11,17 @@ import { User } from '../modules/accounts/models/user.entity';
 // - When using the TypeORM CLI (migration:run/generate), allow TS migrations
 const isTsRuntime = __filename.endsWith('.ts') || __dirname.includes('src');
 const isTestRuntime = !!process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test';
+
+const allowTsMigrations = process.env.TYPEORM_ALLOW_TS_MIGRATIONS === 'true';
+
 const dbUrl =
   (isTestRuntime && process.env.TEST_DATABASE_URL)
     ? process.env.TEST_DATABASE_URL
     : process.env.DATABASE_URL;
+
+const migrations = allowTsMigrations
+  ? (isTsRuntime ? ['src/db/migrations/*.ts', 'dist/db/migrations/*.js'] : ['dist/db/migrations/*.js'])
+  : ['dist/db/migrations/*.js'];
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -22,11 +29,9 @@ export const AppDataSource = new DataSource({
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   synchronize: false,
   logging: false,
-
   entities: [
     Order, Instrument, MarketData, User,
     ...(isTsRuntime ? ['src/**/*.entity.ts'] : ['dist/**/*.entity.js']),
   ],
-  migrations: ['src/db/migrations/*.ts', 'dist/db/migrations/*.js'],
-
+  migrations,
 });

@@ -407,6 +407,7 @@ INSERT INTO public.marketdata (id, instrumentid, high, low, open, close, previou
 INSERT INTO public.marketdata (id, instrumentid, high, low, open, close, previousclose, date) VALUES (124, 55, 19.30, 18.75, 19.10, 19.00, 19.05, '2023-07-14');
 INSERT INTO public.marketdata (id, instrumentid, high, low, open, close, previousclose, date) VALUES (125, 27, 636.00, 620.00, 636.00, 624.00, 623.00, '2023-07-14');
 INSERT INTO public.marketdata (id, instrumentid, high, low, open, close, previousclose, date) VALUES (126, 33, 418.50, 407.20, 418.00, 414.70, 418.50, '2023-07-14');
+INSERT INTO public.marketdata (id, instrumentid, high, low, open, close, previousclose, date) VALUES (127, 66, 1, 1, 1, 1, 1, '2023-07-14');
 
 
 --

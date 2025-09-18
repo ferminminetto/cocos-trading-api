@@ -22,4 +22,7 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional({ description: 'Price for LIMIT orders' })
   @IsOptional() @IsString() price?: string;
+
+  @ApiPropertyOptional({ description: 'Idempotence key to avoid duplicate orders' })
+  @IsOptional() @IsString() idempotenceKey?: string;
 }
