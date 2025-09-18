@@ -26,10 +26,8 @@ describe('OrderService (integration)', () => {
     ordersRepo = new OrderRepository(ds);
     accountRepo = new AccountRepository(ds);
     marketRepo = new MarketDataRepository(ds);
-    service = new OrderService(ds, ordersRepo, accountRepo, marketRepo);
-
-    // Ensure test-generated orders fall into the cleanup range (id > 17)
-    await ds.query(`SELECT setval('public.orders_id_seq', 17, true);`);
+    const testLogger = { info: jest.fn(), error: jest.fn(), warn: jest.fn() };
+    service = new OrderService(ds, ordersRepo, accountRepo, marketRepo, testLogger);
   });
 
   beforeEach(async () => {
@@ -571,5 +569,48 @@ describe('OrderService (integration)', () => {
     expect(Number(pos.close)).toBe(120);
     expect(Number(pos.previousClose)).toBe(100);
     expect(Number(pos.dailyReturnPct)).toBeCloseTo(20, 6);
+  });
+
+  it('prevents duplicate orders with the same idempotenceKey', async () => {
+    const userId = testUserId;
+    const instrumentId = TEST_INSTRUMENT_ID_STOCK;
+    const idempotenceKey = 'unique-key-123';
+
+    // Seed market price
+    await marketRepo.save({
+      instrumentId,
+      close: '100.00',
+      previousClose: '100.00',
+      date: '2025-01-01',
+    });
+
+    // Seed user cash
+    await ordersRepo.insert({
+      instrumentId: TEST_INSTRUMENT_ID_CURRENCY,
+      userId,
+      size: 1000,
+      price: '1.00',
+      type: ORDER_TYPES.MARKET,
+      side: ORDER_SIDES.CASH_IN,
+      status: ORDER_STATUS.FILLED,
+      datetime: new Date(),
+    });
+
+    // First order should succeed
+    const dto: CreateOrderDto = {
+      userId,
+      instrumentId,
+      side: ORDER_SIDES.BUY,
+      type: ORDER_TYPES.MARKET,
+      size: 1,
+      idempotenceKey,
+    };
+
+    const created = await service.create(dto);
+    expect(created).toBeDefined();
+    expect(created.idempotenceKey).toBe(idempotenceKey);
+
+    // Second order with same idempotenceKey should throw
+    await expect(service.create(dto)).rejects.toThrow('Duplicate order');
   });
 });

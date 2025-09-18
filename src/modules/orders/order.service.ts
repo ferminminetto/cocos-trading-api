@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import Decimal from 'decimal.js';
 import { CreateOrderDto, } from './dto/create-order.dto';
@@ -14,50 +14,116 @@ export class OrderService {
     private readonly ordersRepo: OrderRepository,
     private readonly accountRepo: AccountRepository,
     private readonly marketRepo: MarketDataRepository,
+    @Inject('LOGGER') private readonly logger: any,
   ) { }
 
-  async create(order: CreateOrderDto, idemKey?: string) {
-    return this.ds.transaction(async (mgr) => {
-      // Lock for user to avoid race conditions (released on commit/rollback)
-      await mgr.query('SELECT pg_advisory_xact_lock($1)', [order.userId]);
+  /**
+   * Creates an order (BUY/SELL/CASH_IN/CASH_OUT).
+   * Handles idempotency to avoid duplicates, locking to prevent race conditions and double spend, and business logic.
+   */
+  async create(order: CreateOrderDto) {
+    const startedAt = Date.now();
+    const ctxBase = {
+      userId: order.userId,
+      side: order.side,
+      type: order.type,
+      instrumentId: order.instrumentId,
+      size: order.size,
+      moneyAmount: order.moneyAmount,
+      price: order.price,
+      idempotenceKey: order.idempotenceKey,
+    };
 
-      // Idempotence key check if received
-      if (idemKey) {
-        await this.ordersRepo.ensureNotDuplicated(idemKey, mgr);
-      }
+    this.logger.info({ msg: 'order.create.request', ...ctxBase });
 
-      // Retrieve necessary data
-      const cash = new Decimal(await this.accountRepo.getCashAvailable(order.userId, mgr));
-      const shares = order.side === ORDER_SIDES.SELL
-        ? new Decimal(await this.accountRepo.getNetShares(order.userId, order.instrumentId!, mgr))
-        : new Decimal(0);
+    try {
+      const result = await this.ds.transaction(async (mgr) => {
+        // Lock (avoids race conditions)
+        await mgr.query('SELECT pg_advisory_xact_lock($1)', [order.userId]);
 
-      // Business Layer
-      if (order.side === ORDER_SIDES.BUY) {
-        return await this.buyOrder(order, cash, mgr, idemKey);
-      }
+        // Idempotency
+        if (order.idempotenceKey) {
+          await this.ordersRepo.ensureNotDuplicated(order.idempotenceKey, mgr);
+          this.logger.info({ msg: 'order.idempotence.checked', idempotenceKey: order.idempotenceKey, userId: order.userId });
+        }
 
-      if (order.side === ORDER_SIDES.SELL) {
-        return await this.sellOrder(order, shares, mgr, idemKey);
-      }
+        const cash = new Decimal(await this.accountRepo.getCashAvailable(order.userId, mgr));
+        const shares = order.side === ORDER_SIDES.SELL
+          ? new Decimal(await this.accountRepo.getNetShares(order.userId, order.instrumentId!, mgr))
+          : new Decimal(0);
 
-      if (order.side === ORDER_SIDES.CASH_IN) {
-        return await this.cashInOrder(order, mgr, idemKey);
-      }
+        this.logger.info({
+            msg: 'order.resources.loaded',
+            userId: order.userId,
+            cash: cash.toString(),
+            shares: shares.toString(),
+            side: order.side,
+            instrumentId: order.instrumentId
+        });
 
-      if (order.side === ORDER_SIDES.CASH_OUT) {
-        return await this.cashOutOrder(order, cash, mgr, idemKey);
-      }
+        let created: any;
 
-      throw new BadRequestException('Unsupported side');
-    });
+        if (order.side === ORDER_SIDES.BUY) {
+          this.logger.info({ msg: 'order.branch.buy', ...ctxBase, cash: cash.toString() });
+          created = await this.buyOrder(order, cash, mgr);
+        } else if (order.side === ORDER_SIDES.SELL) {
+          this.logger.info({ msg: 'order.branch.sell', ...ctxBase, shares: shares.toString() });
+          created = await this.sellOrder(order, shares, mgr);
+        } else if (order.side === ORDER_SIDES.CASH_IN) {
+          this.logger.info({ msg: 'order.branch.cash_in', ...ctxBase });
+          created = await this.cashInOrder(order, mgr);
+        } else if (order.side === ORDER_SIDES.CASH_OUT) {
+          this.logger.info({ msg: 'order.branch.cash_out', ...ctxBase, cash: cash.toString() });
+          created = await this.cashOutOrder(order, cash, mgr);
+        } else {
+          this.logger.warn({ msg: 'order.branch.unsupported', ...ctxBase });
+          throw new BadRequestException('Unsupported side');
+        }
+
+        this.logger.info({
+          msg: 'order.persisted',
+          orderId: created.id,
+          status: created.status,
+          side: created.side,
+          type: created.type,
+          price: created.price,
+          size: created.size,
+          idempotenceKey: created.idempotenceKey,
+        });
+
+        return created;
+      });
+
+      const durationMs = Date.now() - startedAt;
+      this.logger.info({
+        msg: 'order.create.success',
+        orderId: result.id,
+        status: result.status,
+        userId: result.userId,
+        side: result.side,
+        durationMs
+      });
+      return result;
+    } catch (err: any) {
+      const durationMs = Date.now() - startedAt;
+      this.logger.error({
+        msg: 'order.create.failed',
+        error: err.message,
+        stack: err.stack,
+        ...ctxBase,
+        durationMs
+      });
+      throw err;
+    }
   }
 
   // Encapsulates logic for a BUY order.
-  private async buyOrder(order: CreateOrderDto, cash: Decimal, mgr: EntityManager, idemKey?: string) {
+  private async buyOrder(order: CreateOrderDto, cash: Decimal, mgr: EntityManager) {
     // If Order TYPE is LIMIT, use the provided price, otherwise get the current market price
     const priceStr = order.type === ORDER_TYPES.LIMIT ? order.price : await this.marketRepo.getExecPrice(order.instrumentId!, mgr);
+    // IF no price is found and the order is not CASH_IN or CASH_OUT (currencies), throw error
     if (!priceStr) throw new BadRequestException('No price');
+
 
     const price = new Decimal(priceStr);
     if (price.lte(0)) throw new BadRequestException('Invalid price');
@@ -86,7 +152,7 @@ export class OrderService {
   }
 
   // Encapsulates logic for a SELL order.
-  private async sellOrder(order: CreateOrderDto, shares: Decimal, mgr: EntityManager, idemKey?: string) {
+  private async sellOrder(order: CreateOrderDto, shares: Decimal, mgr: EntityManager) {
     if (!order.size || order.size <= 0) throw new BadRequestException('Invalid size');
     if (shares.lt(order.size)) {
       return this.ordersRepo.insertOrder(mgr, { ...order, status: ORDER_STATUS.REJECTED });
@@ -102,18 +168,18 @@ export class OrderService {
   }
 
   // Encapsulates logic for a CASH_IN order.
-  private async cashInOrder(order: CreateOrderDto, mgr: EntityManager, idemKey?: string) {
+  private async cashInOrder(order: CreateOrderDto, mgr: EntityManager) {
     if (!order.size || order.size <= 0) throw new BadRequestException('Invalid size');
 
     // If Order is LIMIT then we use the provided price, if not we get the current market price
     const priceStr = order.type === ORDER_TYPES.LIMIT ? order.price : await this.marketRepo.getExecPrice(order.instrumentId!, mgr);
-    if (!priceStr) throw new BadRequestException('No price');
+    if (!priceStr) throw new BadRequestException('No price from market for cash in');
 
     const newStatus = order.type == ORDER_TYPES.LIMIT ? ORDER_STATUS.NEW : ORDER_STATUS.FILLED;
     return this.ordersRepo.insertOrder(mgr, { ...order, price: priceStr, status: newStatus });
   }
 
-  private async cashOutOrder(order: CreateOrderDto, cash: Decimal, mgr: EntityManager, idemKey?: string) {
+  private async cashOutOrder(order: CreateOrderDto, cash: Decimal, mgr: EntityManager) {
     if (!order.size || order.size <= 0) throw new BadRequestException('Invalid amount');
     if (cash.lt(order.size)) {
       return this.ordersRepo.insertOrder(mgr, { ...order, status: ORDER_STATUS.REJECTED });
