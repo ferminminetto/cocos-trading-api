@@ -5,6 +5,7 @@
 ## Requisitos
 - Node 20
 - PostgreSQL (si corres local, crea dos DB: cocos_dev y cocos_test) o Docker
+- **Recomendado esquema hibrido**: inicializar con `docker-compose up db` y correr la app local. Usar FOR LOCAL DEVELOPMENT en `.env`.
 
 ## Variables de entorno
 Copiar `.env.example` a `.env` y ajustar (ver: [`.env.example`](./.env.example)).
