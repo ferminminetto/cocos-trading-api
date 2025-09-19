@@ -42,10 +42,9 @@ export class AccountRepository {
           AND o.status = 'FILLED'
           AND i.type <> 'MONEDA'
         GROUP BY o.instrumentId
-        HAVING (
+        HAVING
           SUM(CASE WHEN o.side = 'BUY'  THEN o.size ELSE 0 END)
-        - SUM(CASE WHEN o.side = 'SELL' THEN o.size ELSE 0 END)
-        ) > 0
+        - SUM(CASE WHEN o.side = 'SELL' THEN o.size ELSE 0 END) > 0
       ),
       last_prices AS (
         SELECT DISTINCT ON (md.instrumentId)
@@ -56,24 +55,24 @@ export class AccountRepository {
       positions_valued AS (
         SELECT
           p.instrumentId,
-          p.shares::numeric                            AS shares,
-          lp.close::numeric                            AS close,
-          lp.previousClose::numeric                    AS previousClose,
-          (p.shares::numeric * lp.close::numeric)      AS monetary_value,
+          p.shares::numeric AS shares,
+          COALESCE(lp.close::numeric, lp.previousClose::numeric) AS close,
+          lp.previousClose::numeric AS previousClose,
+          (p.shares::numeric * COALESCE(lp.close::numeric, lp.previousClose::numeric)) AS monetary_value,
           CASE
             WHEN lp.previousClose IS NULL OR lp.previousClose = 0 THEN NULL
-            ELSE ((lp.close::numeric / lp.previousClose::numeric) - 1) * 100
+            ELSE ((COALESCE(lp.close::numeric, lp.previousClose::numeric) / lp.previousClose::numeric) - 1) * 100
           END AS daily_return_pct
         FROM positions p
         JOIN last_prices lp ON lp.instrumentId = p.instrumentId
       ),
       cash AS (
         SELECT
-          COALESCE(SUM(CASE WHEN side = 'CASH_IN' AND status = 'FILLED'  THEN size ELSE 0 END), 0)::numeric
-        - COALESCE(SUM(CASE WHEN side = 'CASH_OUT' AND STATUS ='FILLED' THEN size ELSE 0 END), 0)::numeric
-        - COALESCE(SUM(CASE WHEN side = 'BUY'  AND status = 'FILLED' THEN size * price ELSE 0 END), 0)::numeric
-        + COALESCE(SUM(CASE WHEN side = 'SELL' AND status = 'FILLED' THEN size * price ELSE 0 END), 0)::numeric
-          AS cash_available
+          COALESCE(SUM(CASE WHEN side = 'CASH_IN'  AND status = 'FILLED' THEN size        ELSE 0 END), 0)::numeric
+        - COALESCE(SUM(CASE WHEN side = 'CASH_OUT' AND status = 'FILLED' THEN size        ELSE 0 END), 0)::numeric
+        - COALESCE(SUM(CASE WHEN side = 'BUY'      AND status = 'FILLED' THEN size*price  ELSE 0 END), 0)::numeric
+        + COALESCE(SUM(CASE WHEN side = 'SELL'     AND status = 'FILLED' THEN size*price  ELSE 0 END), 0)::numeric
+            AS cash_available
         FROM orders
         WHERE userId = $1
       )
@@ -104,10 +103,10 @@ export class AccountRepository {
     `;
     const [row] = await this.dataSource.query(sql, [userId]);
     return {
-      cash_available: row.cash_available,
-      positions_value: row.positions_value,
-      total_value: row.total_value,
-      positions: row.positions ?? [],
+      cash_available: row?.cash_available ?? '0',
+      positions_value: row?.positions_value ?? '0',
+      total_value: row?.total_value ?? '0',
+      positions: row?.positions ?? [],
     };
   }
 

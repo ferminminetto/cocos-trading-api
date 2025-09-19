@@ -39,30 +39,39 @@ describe('AccountRepository (integration)', () => {
   });
 
   it('ignores CANCELLED/REJECTED in cash and positions', async () => {
-    const instrumentId = TEST_INSTRUMENT_ID_CURRENCY; // existing instrument non-currency
-    await ordersRepo.insert({
-      userId: 2,
-      instrumentId,
-      side: ORDER_SIDES.CASH_IN,
-      type: ORDER_TYPES.MARKET,
-      status: ORDER_STATUS.CANCELLED,
-      size: 200,
-    });
-    let row = await repo.getUserPortfolio(2);
-    expect(row.cash_available).toBe('0');
+    const instrumentId = TEST_INSTRUMENT_ID_CURRENCY; // currency instrument
 
-    const orderCreated = await ordersRepo.insert({
-      userId: 2,
-      instrumentId,
-      side: ORDER_SIDES.CASH_IN,
-      type: ORDER_TYPES.MARKET,
-      status: ORDER_STATUS.FILLED,
-      size: 200,
-    });
-    row = await repo.getUserPortfolio(2);
-    expect(row.cash_available).toBe('200');
+    // Create isolated user to avoid interference with seeded data
+    const rows = await ds.query(`INSERT INTO users DEFAULT VALUES RETURNING id`);
+    const userId = rows[0].id;
 
+    try {
+      await ordersRepo.insert({
+        userId,
+        instrumentId,
+        side: ORDER_SIDES.CASH_IN,
+        type: ORDER_TYPES.MARKET,
+        status: ORDER_STATUS.CANCELLED,
+        size: 200,
+      });
 
+      let row = await repo.getUserPortfolio(userId);
+      expect(row.cash_available).toBe('0');
 
+      const orderCreated = await ordersRepo.insert({
+        userId,
+        instrumentId,
+        side: ORDER_SIDES.CASH_IN,
+        type: ORDER_TYPES.MARKET,
+        status: ORDER_STATUS.FILLED,
+        size: 200,
+      });
+
+      row = await repo.getUserPortfolio(userId);
+      expect(row.cash_available).toBe('200');
+    } finally {
+      await ordersRepo.delete({ userId });
+      await ds.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    }
   });
 });
