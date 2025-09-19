@@ -39,7 +39,12 @@ describe('OrderService (integration)', () => {
   });
 
   afterEach(async () => {
-    // Clean only test-created orders 
+    // Remove all orders created for this test user to avoid FK violations
+    if (testUserId) {
+      await ordersRepo.delete({ userId: testUserId });
+    }
+
+    // Legacy cleanup for any stray test records above seed watermark
     const toDelete = await ordersRepo
       .createQueryBuilder('o')
       .where('o.id > :id', { id: 17 })
