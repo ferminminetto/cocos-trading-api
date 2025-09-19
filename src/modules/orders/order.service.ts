@@ -6,16 +6,21 @@ import { AccountRepository } from '../accounts/account.repository';
 import { MarketDataRepository } from './market-data.repository';
 import { OrderRepository } from './order.repository';
 import { ORDER_TYPES, ORDER_SIDES, ORDER_STATUS } from './constants/order.constants';
+import { OrderHandler } from './core/core-handler';
+import { ORDER_HANDLERS } from './core/handlers/tokens';
+
 
 @Injectable()
 export class OrderService {
+
   constructor(
     private readonly ds: DataSource,
     private readonly ordersRepo: OrderRepository,
     private readonly accountRepo: AccountRepository,
     private readonly marketRepo: MarketDataRepository,
     @Inject('LOGGER') private readonly logger: any,
-  ) { }
+    @Inject(ORDER_HANDLERS) private readonly handlers: Record<string, OrderHandler>,
+  ) {}
 
   /**
    * Creates an order (BUY/SELL/CASH_IN/CASH_OUT).
@@ -63,22 +68,8 @@ export class OrderService {
 
         let created: any;
 
-        if (order.side === ORDER_SIDES.BUY) {
-          this.logger.info({ msg: 'order.branch.buy', ...ctxBase, cash: cash.toString() });
-          created = await this.buyOrder(order, cash, mgr);
-        } else if (order.side === ORDER_SIDES.SELL) {
-          this.logger.info({ msg: 'order.branch.sell', ...ctxBase, shares: shares.toString() });
-          created = await this.sellOrder(order, shares, mgr);
-        } else if (order.side === ORDER_SIDES.CASH_IN) {
-          this.logger.info({ msg: 'order.branch.cash_in', ...ctxBase });
-          created = await this.cashInOrder(order, mgr);
-        } else if (order.side === ORDER_SIDES.CASH_OUT) {
-          this.logger.info({ msg: 'order.branch.cash_out', ...ctxBase, cash: cash.toString() });
-          created = await this.cashOutOrder(order, cash, mgr);
-        } else {
-          this.logger.warn({ msg: 'order.branch.unsupported', ...ctxBase });
-          throw new BadRequestException('Unsupported side');
-        }
+        const orderHandler = this.handlers[order.side];
+        created = await orderHandler.execute(order, mgr);
 
         this.logger.info({
           msg: 'order.persisted',

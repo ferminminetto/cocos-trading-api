@@ -8,6 +8,10 @@ import { CreateOrderDto, } from './dto/create-order.dto';
 import { ORDER_STATUS, ORDER_TYPES, ORDER_SIDES } from './constants/order.constants';
 import { BadRequestException } from '@nestjs/common';
 import { TEST_INSTRUMENT_ID_CURRENCY, TEST_INSTRUMENT_ID_STOCK } from '../../../test/constants';
+import { BuyOrderHandler } from './core/handlers/buy.handler';
+import { SellOrderHandler } from './core/handlers/sell.handler';
+import { CashInHandler } from './core/handlers/cash-in.handler';
+import { CashOutHandler } from './core/handlers/cash-out.handler';
 
 /**
  * Integration tests for OrderService.create using the real database.
@@ -27,7 +31,20 @@ describe('OrderService (integration)', () => {
     accountRepo = new AccountRepository(ds);
     marketRepo = new MarketDataRepository(ds);
     const testLogger = { info: jest.fn(), error: jest.fn(), warn: jest.fn() };
-    service = new OrderService(ds, ordersRepo, accountRepo, marketRepo, testLogger);
+
+    const buyHandler = new BuyOrderHandler(accountRepo, marketRepo, ordersRepo);
+    const sellHandler = new SellOrderHandler(accountRepo, marketRepo, ordersRepo);
+    const cashInHandler = new CashInHandler(marketRepo, ordersRepo);
+    const cashOutHandler = new CashOutHandler(accountRepo, ordersRepo);
+
+    const handlers = {
+      [ORDER_SIDES.BUY]: buyHandler,
+      [ORDER_SIDES.SELL]: sellHandler,
+      [ORDER_SIDES.CASH_IN]: cashInHandler,
+      [ORDER_SIDES.CASH_OUT]: cashOutHandler,
+    };
+
+    service = new OrderService(ds, ordersRepo, accountRepo, marketRepo, testLogger, handlers);
   });
 
   beforeEach(async () => {
